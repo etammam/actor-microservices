@@ -1,0 +1,25 @@
+<!--EXTERNAL_PROPERTIES: MSBuildThisFileDirectory-->
+<Project>
+	<PropertyGroup>
+	    <Title>Actor Microservices</Title>
+        <Authors>I(E)slam Mostafa Tammam.</Authors>
+        <Description>Actor base Microservices. build on top of Akka.Net</Description>
+        <RepositoryType>git</RepositoryType>
+		<TargetFramework>net7.0</TargetFramework>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<CodeAnalysisRuleSet>$(MSBuildThisFileDirectory).ruleset</CodeAnalysisRuleSet>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <Version>1.0.1</Version>
+	</PropertyGroup>
+
+    <ItemGroup>
+    <PackageReference Include="Akka.Cluster" Version="1.4.8" />
+		<PackageReference Include="Akka.Cluster.Discovery.Consul" Version="0.3.0" />
+		<PackageReference Include="Akka.Cluster.Tools" Version="1.4.8" />
+		<PackageReference Include="Akka.Logger.Serilog" Version="1.4.8" />
+		<PackageReference Include="Serilog.Extensions.Hosting" Version="7.0.0" />
+		<PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
+    </ItemGroup>
+
+</Project>
