@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Consul;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting.Server.Features;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace ActorMicroservice.Common
 {
@@ -29,48 +25,28 @@ namespace ActorMicroservice.Common
             return services;
         }
 
-        public static void UserConsulServiceRegistration(this IApplicationBuilder app,
-            string serviceId,
-            string serviceName,
-            string[] tags)
+        /// <summary>
+        /// add consul service must called after <see cref="AddConsulClient"/>
+        /// the propose of <see cref="AddConsulClient"/> is initializing the consul client connection
+        /// so there are no need to redo the initialization again.
+        /// </summary>
+        /// <param name="serviceCollection"></param>
+        /// <param name="serviceInformation"></param>
+        /// <returns></returns>
+        public static void AddConsulService(this IServiceCollection serviceCollection,
+            Action<ServiceInformation> serviceInformation)
         {
+            var instance = new ServiceInformation();
+            serviceInformation.Invoke(instance);
+            serviceCollection.AddSingleton(instance);
+            serviceCollection.AddHostedService<ConsulServiceMonitor>();
+        }
 
-            var lifetime = app.ApplicationServices.GetService<IHostApplicationLifetime>();
-
-            // Retrieve Consul client from DI
-            var consulClient = app.ApplicationServices.GetRequiredService<IConsulClient>();
-
-            // Setup logger
-            var loggingFactory = app.ApplicationServices.GetRequiredService<ILoggerFactory>();
-            var logger = loggingFactory.CreateLogger<IApplicationBuilder>();
-
-            // Get server IP address
-            var features = app.Properties["server.Features"] as FeatureCollection;
-            var addresses = features?.Get<IServerAddressesFeature>();
-            var address = addresses?.Addresses.First();
-            Console.WriteLine($"binned address: {string.Join(",", addresses?.Addresses!)}");
-
-            // Register service with consul
-            var uri = new Uri(address!);
-            Console.WriteLine($"instance running on: {uri}");
-            var registration = new AgentServiceRegistration()
-            {
-                ID = serviceId,
-                Name = serviceName,
-                Address = $"{uri.Scheme}://{uri.Host}",
-                Port = uri.Port,
-                Tags = tags
-            };
-
-            logger.LogInformation("Registering with Consul");
-            consulClient.Agent.ServiceDeregister(registration.ID).Wait();
-            consulClient.Agent.ServiceRegister(registration).Wait();
-
-            lifetime.ApplicationStopping.Register(() =>
-            {
-                logger.LogInformation("De-registering from Consul");
-                consulClient.Agent.ServiceDeregister(registration.ID).Wait();
-            });
+        public static async Task LeaveConsulAsync(this IServiceProvider service, CancellationToken cancellationToken = default)
+        {
+            var consulClient = service.GetRequiredService<IConsulClient>();
+            var currentServiceInformation = service.GetRequiredService<ServiceInformation>();
+            await consulClient.Agent.ServiceDeregister(currentServiceInformation.ServiceNameId, cancellationToken);
         }
     }
 }

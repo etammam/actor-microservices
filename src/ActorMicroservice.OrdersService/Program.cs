@@ -21,6 +21,12 @@ builder.Services.AddConsulClient(options =>
 {
     options.Address = new Uri("http://localhost:8500");
 });
+builder.Services.AddConsulService(service =>
+{
+    service.ServiceName = "orders-service";
+    service.ServiceNameId = $"orders-service-{Guid.NewGuid():N}";
+    service.UrlSegment = "orders";
+});
 
 const string actorSystemName = "orders-actor-system";
 const int port = 0;
@@ -55,6 +61,11 @@ var config = ConfigurationFactory.ParseString($@"
                 loglevel = INFO
                 loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""]
                 logger-formatter=""Akka.Logger.Serilog.SerilogLogMessageFormatter, Akka.Logger.Serilog""
+                coordinated-shutdown {{
+                    terminate-actor-system = on
+                    exit-clr = on
+                    run-by-actor-system-terminate = on
+                }}
             }}");
 
 var actorSystem = ActorSystem.Create(actorSystemName, config);
@@ -90,16 +101,10 @@ var lifetime = app.Services.GetService<IHostApplicationLifetime>();
 
 lifetime.ApplicationStopping.Register(() =>
 {
+    app.Services.LeaveConsulAsync().Wait();
     var runningActorSystem = app.Services.GetService<ActorSystem>();
     var runningActorCluster = Cluster.Get(runningActorSystem);
     runningActorSystem.Terminate().Wait();
     runningActorCluster.LeaveAsync().Wait();
 });
-
-
-//app.UserConsulServiceRegistration(
-//    serviceId: $"orders-service-{Guid.NewGuid():N}",
-//    serviceName: "orders-services",
-//    tags: new[] { "orders" });
-
 app.Run();

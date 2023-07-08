@@ -22,6 +22,13 @@ builder.Services.AddConsulClient(options =>
     options.Address = new Uri("http://localhost:8500");
 });
 
+builder.Services.AddConsulService(service =>
+{
+    service.ServiceName = "customers-service";
+    service.ServiceNameId = $"customers-service-{Guid.NewGuid():N}";
+    service.UrlSegment = "customers";
+});
+
 const string actorSystemName = "customer-actor-system";
 const int port = 0;
 const string host = "127.0.0.1";
@@ -55,6 +62,11 @@ var config = ConfigurationFactory.ParseString($@"
                 loglevel = INFO
                 loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""]
                 logger-formatter=""Akka.Logger.Serilog.SerilogLogMessageFormatter, Akka.Logger.Serilog""
+                coordinated-shutdown {{
+                    terminate-actor-system = on
+                    exit-clr = on
+                    run-by-actor-system-terminate = on
+                }}
             }}");
 
 var actorSystem = ActorSystem.Create(actorSystemName, config);
@@ -72,11 +84,7 @@ builder.Services.AddSingleton(cluster);
 
 var app = builder.Build();
 
-app.MapGet("/", () =>
-{
-    Console.WriteLine("new request come..");
-    return Results.Ok("Hello World!");
-});
+app.MapGet("/", () => Results.Ok("Customers Services Working..."));
 app.MapGet("/_health", () => Results.Ok());
 
 var lifetime = app.Services.GetService<IHostApplicationLifetime>();
@@ -85,13 +93,8 @@ lifetime.ApplicationStopping.Register(() =>
 {
     var runningActorSystem = app.Services.GetService<ActorSystem>();
     var runningActorCluster = Cluster.Get(runningActorSystem);
-    runningActorSystem.Terminate().Wait();
     runningActorCluster.LeaveAsync().Wait();
+    runningActorSystem.Terminate().Wait();
 }, false);
 
 app.Run();
-
-//app.UserConsulServiceRegistration(
-//    serviceId: $"customer-service-{Guid.NewGuid():N}",
-//    serviceName: "customers-services",
-//    tags: new[] { "customers" });

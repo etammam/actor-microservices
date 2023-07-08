@@ -39,7 +39,7 @@ namespace ActorMicroservice.ApiGateway
                 if (serviceResult.StatusCode == HttpStatusCode.OK)
                 {
                     var clusters = await BuildCluster(serviceResult);
-                    var routes = await ExtractRoutes(serviceResult);
+                    var routes = await BuildRoutes(serviceResult);
                     Update(routes, clusters);
                 }
 
@@ -54,25 +54,28 @@ namespace ActorMicroservice.ApiGateway
             var services = serviceMapping.GroupBy(x => x.Value.Service);
             foreach (var service in services)
             {
+                var healthCheck = !service.Key.Contains("actor")
+                    ? new ActiveHealthCheckConfig
+                    {
+                        Enabled = false,
+                        Interval = TimeSpan.FromSeconds(10),
+                        Timeout = TimeSpan.FromSeconds(10),
+                        Policy = HealthCheckConstants.ActivePolicy.ConsecutiveFailures,
+                        Path = "/_health"
+                    }
+                    : null;
                 var cluster = new ClusterConfig
                 {
                     ClusterId = $"{service.Key}-cluster",
                     Destinations = service.ToDictionary(_ => Guid.NewGuid().ToString("n"), destinationConfig => new DestinationConfig
                     {
-                        Address = destinationConfig.Value.Address,
+                        Address = $"http://{destinationConfig.Value.Address}:{destinationConfig.Value.Port}/",
                         Health = "/_health"
                     }),
-                    LoadBalancingPolicy = LoadBalancingPolicies.LeastRequests,
+                    LoadBalancingPolicy = LoadBalancingPolicies.RoundRobin,
                     HealthCheck = new HealthCheckConfig()
                     {
-                        Active = new ActiveHealthCheckConfig
-                        {
-                            Enabled = true,
-                            Interval = TimeSpan.FromSeconds(10),
-                            Timeout = TimeSpan.FromSeconds(10),
-                            Policy = HealthCheckConstants.ActivePolicy.ConsecutiveFailures,
-                            Path = "/_health"
-                        }
+                        Active = healthCheck
                     },
                     Metadata = new Dictionary<string, string>
                     {
@@ -92,26 +95,43 @@ namespace ActorMicroservice.ApiGateway
                 }
             }
 
-            return clusters.Values.ToList();
+            return clusters.Values.Where(x => !x.ClusterId.Contains("actor")).ToList();
         }
 
-        private async Task<List<RouteConfig>> ExtractRoutes(QueryResult<Dictionary<string, AgentService>> serviceResult)
+        private async Task<List<RouteConfig>> BuildRoutes(QueryResult<Dictionary<string, AgentService>> serviceResult)
         {
             var serviceMapping = serviceResult.Response;
             var routes = new List<RouteConfig>();
             foreach (var (key, svc) in serviceMapping)
             {
                 if (routes.Any(r => r.ClusterId == svc.Service)) continue;
+                if (svc.Service.Contains("actor")) continue;
+
+                var urlSegment = !svc.Service.Contains("actor")
+                    ? svc.Tags[0]
+                    : null;
+
+                var transformer = !string.IsNullOrEmpty(urlSegment)
+                    ? new List<IReadOnlyDictionary<string, string>>()
+                    {
+                        new Dictionary<string, string>()
+                        {
+                            { "PathRemovePrefix", urlSegment }
+                        }
+                    }
+                    : null;
 
                 var route = new RouteConfig
                 {
                     ClusterId = $"{svc.Service}-cluster",
-                    RouteId = $"{svc.Service}-route",
+                    RouteId = $"{svc.Service}-{Guid.NewGuid():N}-route",
                     Match = new RouteMatch()
                     {
-                        Path = "{**catch-all}"
-                    }
+                        Path = !string.IsNullOrEmpty(urlSegment) ? $"/{urlSegment}/{{**catch-all}}" : null
+                    },
+                    Transforms = transformer
                 };
+
 
                 var routeErrs = await _proxyConfigValidator.ValidateRouteAsync(route);
                 if (routeErrs.Any())
@@ -125,7 +145,7 @@ namespace ActorMicroservice.ApiGateway
                 }
                 routes.Add(route);
             }
-            return routes;
+            return routes.DistinctBy(x => x.ClusterId).ToList();
         }
 
         public IProxyConfig GetConfig() => _config;

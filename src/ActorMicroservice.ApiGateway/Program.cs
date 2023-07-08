@@ -2,6 +2,7 @@ using System;
 using ActorMicroservice.ApiGateway;
 using ActorMicroservice.Common;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Yarp.ReverseProxy.Configuration;
 
@@ -22,4 +23,13 @@ app.MapReverseProxy();
 app.UseRouting();
 
 app.MapGet("/", () => "Api Gateway");
+app.MapGet("/_configurations", (IProxyConfigProvider proxyConfiguration) =>
+{
+    var configuration = proxyConfiguration.GetConfig();
+    return Results.Ok(new
+    {
+        Routes = configuration.Routes,
+        Clusters = configuration.Clusters,
+    });
+});
 app.Run();

@@ -8,13 +8,12 @@
 		<TargetFramework>net7.0</TargetFramework>
 		<ImplicitUsings>disable</ImplicitUsings>
 		<Nullable>disable</Nullable>
-		<CodeAnalysisRuleSet>$(MSBuildThisFileDirectory).ruleset</CodeAnalysisRuleSet>
-        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
         <Version>1.0.1</Version>
 	</PropertyGroup>
 
     <ItemGroup>
-    <PackageReference Include="Akka.Cluster" Version="1.4.8" />
+    	<PackageReference Include="Akka.Cluster" Version="1.4.8" />
 		<PackageReference Include="Akka.Cluster.Discovery.Consul" Version="0.3.0" />
 		<PackageReference Include="Akka.Cluster.Tools" Version="1.4.8" />
 		<PackageReference Include="Akka.Logger.Serilog" Version="1.4.8" />
